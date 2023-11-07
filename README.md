@@ -1,0 +1,2 @@
+# MinisTranslator
+ Translations using ChatGPT
