@@ -1,0 +1,12 @@
+<!-- homepage.component.html -->
+<p>homepage works!</p>
+
+<div>
+  <input type="text" [(ngModel)]="userText" />
+  <button (click)="translateText(userText)">Send</button>
+</div>
+
+<div *ngIf="response">
+  <p>Response:</p>
+  <pre>{{ response }}</pre>
+</div>
