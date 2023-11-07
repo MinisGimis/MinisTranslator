@@ -1,7 +1,8 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { OpenAIModels, OpenAIResponse } from 'src/app/types';
 
 @Injectable({
   providedIn: 'root',
@@ -24,22 +25,28 @@ export class OpenaiService {
 
     // Set up the data body for the API request
     const body = {
-      model: 'gpt-3.5-turbo',
+      model: OpenAIModels[0],
       messages: [
         { role: 'system', content: 'you are a translator.' },
         {
           role: 'user',
-          content: `Translate the following text to English: "${text}"`,
+          content: `Translate the following text to English: `,
+        },
+        {
+          role: 'user',
+          content: text,
         },
       ],
-      temperature: 0.3,
-      max_tokens: 60,
+      max_tokens: 5000,
       n: 1,
-      stop: null,
-      top_p: 1,
     };
-
-    // Make the HTTP POST request and return the Observable
-    return this.http.post(this.apiEndpoint, body, { headers });
+    return this.http
+      .post<OpenAIResponse>(this.apiEndpoint, body, { headers })
+      .pipe(
+        map((response) => {
+          // Extract the array of messages from the response
+          return response.choices.map((choice) => choice.message.content);
+        })
+      );
   }
 }
