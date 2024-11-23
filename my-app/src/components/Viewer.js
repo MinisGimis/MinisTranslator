@@ -9,7 +9,6 @@ import Box from "@mui/material/Box";
 import TextField from "@mui/material/TextField";
 import "../styles/App.css";
 import {
-  OPENAI_API_KEY,
   TRANSLATE_TO_ENGLISH_PROMPT,
   TRANSLATION_FORMAT_PROMPT,
   TRANSLATION_ENDPOINT,
