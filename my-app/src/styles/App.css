@@ -27,6 +27,15 @@ body {
   padding: 10px 0 10px 0;
 }
 
+.hoverable-line {
+  transition: background-color 0.2s ease;
+}
+
+.hoverable-line:hover {
+  background-color: #f0f8ff;
+  cursor: pointer;
+}
+
 .scroll-padding {
   height: 300vh;
   display: flex;
@@ -69,18 +78,19 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  z-index: 10000;
 }
 
 .settings-menu {
-  position: absolute;
-  top: 50px;
-  right: 0;
+  position: fixed; /* Ensures it stays on top and doesn't move with other elements */
+  top: 50px; /* Adjust positioning as needed */
+  right: 16px; /* Align to the right */
   background-color: white;
   border: 1px solid #ddd;
   border-radius: 8px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   padding: 16px;
-  z-index: 1000;
+  z-index: 10000; /* A very high value to ensure it appears above everything else */
   width: 250px;
 }
 

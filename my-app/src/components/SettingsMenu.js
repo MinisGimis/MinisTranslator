@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import Switch from "@mui/material/Switch";
 import Slider from "@mui/material/Slider";
 import TextField from "@mui/material/TextField";
+import Button from "@mui/material/Button";
 import "../styles/App.css";
 
 const SettingsMenu = ({
@@ -18,6 +19,9 @@ const SettingsMenu = ({
   const [localFontSize, setLocalFontSize] = useState(fontSize);
   const [localPadding, setLocalPadding] = useState(viewerPadding);
   const [localChapterRegex, setLocalChapterRegex] = useState(chapterRegex);
+  const [apiKey, setApiKey] = useState(
+    () => localStorage.getItem("apiKey") || ""
+  );
 
   useEffect(() => {
     setFontSize(localFontSize);
@@ -51,6 +55,15 @@ const SettingsMenu = ({
     if (file) {
       onFileUpload(file);
     }
+  };
+
+  const handleApiKeyChange = (event) => {
+    setApiKey(event.target.value);
+  };
+
+  const saveApiKey = () => {
+    localStorage.setItem("apiKey", apiKey);
+    alert("API Key saved successfully.");
   };
 
   return (
@@ -102,6 +115,25 @@ const SettingsMenu = ({
       <div className="settings-item">
         <label className="settings-label">Import New File</label>
         <input type="file" accept=".txt" onChange={handleFileUpload} />
+      </div>
+      <div className="settings-item">
+        <label className="settings-label">API Key</label>
+        <TextField
+          variant="outlined"
+          size="small"
+          fullWidth
+          value={apiKey}
+          onChange={handleApiKeyChange}
+          placeholder="Enter your API key"
+        />
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={saveApiKey}
+          style={{ marginLeft: "8px" }}
+        >
+          Save
+        </Button>
       </div>
     </div>
   );
