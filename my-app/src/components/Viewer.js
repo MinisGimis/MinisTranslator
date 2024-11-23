@@ -17,9 +17,7 @@ import {
 } from "../translations/prompts.js";
 
 const Viewer = () => {
-  const [apiKey, setApiKey] = useState(
-    () => localStorage.getItem("apiKey") || ""
-  );
+  const [apiKey] = useState(() => localStorage.getItem("apiKey") || "");
 
   const [chapters, setChapters] = useState(() => {
     const savedChapters = localStorage.getItem("chapters");

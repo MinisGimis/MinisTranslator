@@ -19,7 +19,9 @@ const SettingsMenu = ({
   const [localFontSize, setLocalFontSize] = useState(fontSize);
   const [localPadding, setLocalPadding] = useState(viewerPadding);
   const [localChapterRegex, setLocalChapterRegex] = useState(chapterRegex);
-  const [apiKey] = useState(() => localStorage.getItem("apiKey") || "");
+  const [apiKey, setApiKey] = useState(
+    () => localStorage.getItem("apiKey") || ""
+  );
 
   useEffect(() => {
     setFontSize(localFontSize);
