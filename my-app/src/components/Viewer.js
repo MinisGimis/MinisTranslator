@@ -68,6 +68,7 @@ const Viewer = () => {
       const extractedChapters = extractChapters(savedFileContent);
       setChapters(extractedChapters);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chapters]);
 
   useEffect(() => {

@@ -1,8 +1,6 @@
 export const TRANSLATE_TO_ENGLISH_PROMPT =
   "Can you translate this chinese web novel into English? Please try to keep the punctuation, swearing, meaning, and connotation the same. Some words might be internet slang or have sexual meanings. Please make it in normal English rather than a formal essay. Note that this is in past tense.";
 
-export const OPENAI_API_KEY = "";
-
 export const TRANSLATION_ENDPOINT =
   "https://api.openai.com/v1/chat/completions";
 
