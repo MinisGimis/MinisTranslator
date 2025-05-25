@@ -56,24 +56,25 @@ const Viewer = () => {
   const [clickedLine, setClickedLine] = useState(null);
   const [isLineModalOpen, setIsLineModalOpen] = useState(false);
   const [isGlossaryModalOpen, setIsGlossaryModalOpen] = useState(false);
+  const [autoTranslateNextEnabled, setAutoTranslateNextEnabled] = useState(
+    () => {
+      const savedSetting = localStorage.getItem("autoTranslateNext");
+      return savedSetting ? JSON.parse(savedSetting) : false;
+    }
+  );
+  const [isClearTranslationModalOpen, setIsClearTranslationModalOpen] =
+    useState(false);
 
   const contentRef = useRef(null);
 
   useEffect(() => {
     const savedFileContent = localStorage.getItem("fileContent");
-    console.log(
-      "[useEffect:init] savedFileContent present:",
-      !!savedFileContent
-    );
-    console.log("[useEffect:init] chapters.length:", chapters.length);
-
     if (savedFileContent && chapters.length === 0) {
-      console.log("[useEffect:init] Calling extractChapters...");
       const extractedChapters = extractChapters(savedFileContent);
-      console.log("[useEffect:init] Setting chapters...");
       setChapters(extractedChapters);
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chapters]);
 
   useEffect(() => {
     if (chapters.length > 0) {
@@ -95,250 +96,334 @@ const Viewer = () => {
     localStorage.setItem("glossary", JSON.stringify(glossary));
   }, [glossary]);
 
+  // Effect to listen for changes in localStorage for autoTranslateNext
+  useEffect(() => {
+    const handleStorageChange = (event) => {
+      if (event.key === "autoTranslateNext") {
+        const newValue = event.newValue ? JSON.parse(event.newValue) : false;
+        setAutoTranslateNextEnabled(newValue);
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, []);
+
+  const splitTextIntoChunks = React.useCallback((text, maxChunkSize) => {
+    const lines = text.split("\n");
+    const chunks = [];
+    let currentChunk = "";
+
+    for (const line of lines) {
+      if ((currentChunk + line + "\n").length > maxChunkSize) {
+        chunks.push(currentChunk.trim());
+        currentChunk = line + "\n\n\n"; // Keep original spacing logic
+      } else {
+        currentChunk += line + "\n\n"; // Keep original spacing logic
+      }
+    }
+    if (currentChunk.trim()) {
+      chunks.push(currentChunk.trim());
+    }
+    return chunks;
+  }, []);
+
+  const translateChapter = React.useCallback(
+    async (chapterIndex) => {
+      if (!chapters[chapterIndex] || !apiKey) {
+        console.log(
+          "Translation skipped: chapter or API key missing for index",
+          chapterIndex
+        );
+        return;
+      }
+      if (isTranslating) {
+        // Prevent simultaneous translations if isTranslating is a simple boolean
+        console.log(
+          "Translation skipped: another translation is already in progress."
+        );
+        return;
+      }
+
+      setIsTranslating(true);
+
+      try {
+        const contentToTranslate = chapters[chapterIndex]
+          .split("\n")
+          .map((line) => line.trim())
+          .join("\n\n");
+
+        const chunks = splitTextIntoChunks(contentToTranslate, 300);
+
+        const glossaryTerms = glossary.terms
+          .map(
+            (term) => `"${term["term in original"]}": "${term["translation"]}"`
+          )
+          .join(",\n");
+
+        const glossaryCharacters = glossary.characters
+          .map(
+            (char) =>
+              `{"name in original": "${char["name in original"]}", "name in translation": "${char["name in translation"]}", "gender": "${char["gender"]}"}`
+          )
+          .join(",\n");
+
+        const translateChunk = async (chunk, attempt = 1) => {
+          try {
+            const response = await axios.post(
+              TRANSLATION_ENDPOINT,
+              {
+                model: TRANSLATION_MODEL,
+                messages: [
+                  {
+                    role: "user",
+                    content: `${TRANSLATE_TO_ENGLISH_PROMPT} \n ${TRANSLATION_FORMAT_PROMPT} \n Here is the existing glossary of terms:\n${glossaryTerms}\n\nHere is the existing characters:\n${glossaryCharacters}\n\n`,
+                  },
+                  {
+                    role: "user",
+                    content: chunk,
+                  },
+                ],
+              },
+              {
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${apiKey}`,
+                },
+              }
+            );
+
+            const rawContent = response.data.choices[0].message.content;
+            let parsedResponse;
+            try {
+              parsedResponse = JSON.parse(rawContent);
+            } catch (parseError) {
+              const cleanedContent = rawContent
+                .replace(/\n/g, "TEMPORARY_LONG_STRING_FOR_NEWLINE")
+                .replace(/\\"/g, "TEMPORARY_LONG_STRING_FOR_QUOTES")
+                .replace(/\\/g, "")
+                .replace(/TEMPORARY_LONG_STRING_FOR_NEWLINE/g, "\n")
+                .replace(/TEMPORARY_LONG_STRING_FOR_QUOTES/g, '\\"');
+              parsedResponse = JSON.parse(cleanedContent);
+            }
+
+            if (!parsedResponse["TRANSLATION"]) {
+              throw new Error('Missing "TRANSLATION" in response.');
+            }
+            return {
+              translation: parsedResponse["TRANSLATION"],
+              newTerms: parsedResponse["NEW_TERMS"] || [],
+              newCharacters: parsedResponse["NEW_CHARACTERS"] || [],
+            };
+          } catch (error) {
+            if (attempt < 5) {
+              console.warn(
+                `Translation attempt ${attempt} for chapter ${chapterIndex} failed. Retrying...`
+              );
+              await new Promise((resolve) =>
+                setTimeout(resolve, 1000 * attempt)
+              ); // Exponential backoff
+              return await translateChunk(chunk, attempt + 1);
+            } else {
+              console.error(
+                `Translation for chapter ${chapterIndex} failed after 5 attempts. Returning original text for chunk. Error: ${error}`
+              );
+              return { translation: chunk, newTerms: [], newCharacters: [] }; // Return original chunk for this failed part
+            }
+          }
+        };
+
+        const translatedChunksPromises = chunks.map((chunk) =>
+          translateChunk(chunk)
+        );
+        const translatedResults = await Promise.all(translatedChunksPromises);
+
+        const fullTranslation = translatedResults
+          .map((result) => result.translation)
+          .join("\n\n");
+        const newTerms = translatedResults.flatMap((result) => result.newTerms);
+        const newCharacters = translatedResults.flatMap(
+          (result) => result.newCharacters
+        );
+
+        setTranslations((prev) => ({
+          ...prev,
+          [chapterIndex]: fullTranslation,
+        }));
+
+        const addedTermsSet = new Set(
+          glossary.terms.map((t) => t["term in original"])
+        );
+        const uniqueNewTerms = newTerms.filter((newTerm) => {
+          const termKey = newTerm["term in original"];
+          if (termKey && !addedTermsSet.has(termKey)) {
+            addedTermsSet.add(termKey); // Add to set immediately to handle duplicates within newTerms
+            return true;
+          }
+          return false;
+        });
+
+        if (uniqueNewTerms.length > 0) {
+          setGlossary((prevGlossary) => ({
+            ...prevGlossary,
+            terms: [...prevGlossary.terms, ...uniqueNewTerms],
+          }));
+        }
+
+        const addedCharactersSet = new Set(
+          glossary.characters.map((c) => c["name in original"])
+        );
+        const uniqueNewCharacters = newCharacters.filter((newChar) => {
+          const charKey = newChar["name in original"];
+          if (charKey && !addedCharactersSet.has(charKey)) {
+            addedCharactersSet.add(charKey); // Add to set immediately
+            return true;
+          }
+          return false;
+        });
+
+        if (uniqueNewCharacters.length > 0) {
+          setGlossary((prevGlossary) => ({
+            ...prevGlossary,
+            characters: [...prevGlossary.characters, ...uniqueNewCharacters],
+          }));
+        }
+        console.log("Translation successful for chapter index", chapterIndex);
+      } catch (error) {
+        console.error(`Translation failed for chapter ${chapterIndex}`, error);
+        // Optionally set an error state here for the specific chapter
+      } finally {
+        setIsTranslating(false);
+      }
+    },
+    [
+      apiKey,
+      chapters,
+      glossary,
+      isTranslating,
+      setTranslations,
+      setGlossary,
+      setIsTranslating,
+      splitTextIntoChunks,
+      TRANSLATE_TO_ENGLISH_PROMPT,
+      TRANSLATION_FORMAT_PROMPT,
+      TRANSLATION_ENDPOINT,
+      TRANSLATION_MODEL,
+    ]
+  ); // Added all dependencies
+
   const handleFileUpload = (file) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       let fileContent = e.target.result;
-      console.log("[handleFileUpload] File read, length:", fileContent.length);
 
+      // Remove leading whitespace from each line while preserving newlines
       fileContent = fileContent
-        .split("\n")
-        .map((line) => line.replace(/^\s+/, ""))
-        .join("\n");
+        .split("\n") // Split content into lines
+        .map((line) => line.replace(/^\s+/, "")) // Remove leading whitespace
+        .join("\n"); // Join lines back into a single string
 
       localStorage.setItem("fileContent", fileContent);
-      console.log("[handleFileUpload] Cleaned file stored");
-
       const extractedChapters = extractChapters(fileContent);
       setChapters(extractedChapters);
-      console.log("[handleFileUpload] Chapters set:", extractedChapters.length);
-
       setSelectedChapter(0);
       setTranslations({});
-      setGlossary({ terms: [], characters: [] });
-
+      setGlossary({ terms: [], characters: [] }); // Reset glossary
       localStorage.removeItem("chapters");
       localStorage.removeItem("selectedChapter");
       localStorage.removeItem("translations");
       localStorage.removeItem("glossary");
-
-      console.log("[handleFileUpload] State and localStorage reset");
     };
     reader.readAsText(file);
   };
 
   const extractChapters = (content) => {
-    console.log("[extractChapters] Raw content length:", content.length);
-
     const chapterRegexPattern = new RegExp(chapterRegex, "g");
     const matches = [];
     let match;
-    let index = 0;
 
     while ((match = chapterRegexPattern.exec(content)) !== null) {
-      console.log(
-        `[extractChapters] Match ${index} found:`,
-        match[0].slice(0, 100)
-      ); // Show first 100 chars
       matches.push(match[0].trim());
-      index++;
     }
 
-    console.log("[extractChapters] Total chapters extracted:", matches.length);
     return matches;
   };
 
-  const clearTranslation = () => {
-    setTranslations((prev) => {
-      const updated = { ...prev };
-      delete updated[selectedChapter];
-      return updated;
-    });
+  const openClearTranslationModal = () => {
+    setIsClearTranslationModalOpen(true);
   };
+
+  const handleClearCurrentChapterTranslation = () => {
+    if (selectedChapter !== null) {
+      setTranslations((prev) => {
+        const updated = { ...prev };
+        delete updated[selectedChapter];
+        return updated;
+      });
+    }
+    setIsClearTranslationModalOpen(false);
+  };
+
+  const handleClearAllTranslations = () => {
+    setTranslations({});
+    setIsClearTranslationModalOpen(false);
+  };
+
   const handleTranslate = async () => {
-    if (!chapters[selectedChapter]) return;
+    if (selectedChapter !== null) {
+      await translateChapter(selectedChapter);
+    }
+  };
 
-    // Split the content into chunks of ~300 characters, stopping at the next new line
-    const splitTextIntoChunks = (text, maxChunkSize) => {
-      const lines = text.split("\n");
-      const chunks = [];
-      let currentChunk = "";
+  useEffect(() => {
+    // Refresh autoTranslateNextEnabled from localStorage in case it was changed in SettingsMenu
+    const currentSetting = localStorage.getItem("autoTranslateNext");
+    const isEnabled = currentSetting ? JSON.parse(currentSetting) : false;
+    // Only update state if the value actually changed to prevent unnecessary re-renders
+    if (isEnabled !== autoTranslateNextEnabled) {
+      setAutoTranslateNextEnabled(isEnabled);
+    }
 
-      for (const line of lines) {
-        if ((currentChunk + line + "\n").length > maxChunkSize) {
-          chunks.push(currentChunk.trim());
-          currentChunk = line + "\n\n\n";
-        } else {
-          currentChunk += line + "\n\n";
-        }
-      }
-      if (currentChunk.trim()) {
-        chunks.push(currentChunk.trim());
-      }
-      return chunks;
-    };
-
-    const contentToTranslate = chapters[selectedChapter]
-      .split("\n")
-      .map((line) => line.trim())
-      .join("\n\n");
-
-    const chunks = splitTextIntoChunks(contentToTranslate, 500);
-
-    const glossaryTerms = glossary.terms
-      .map((term) => `"${term["term in original"]}": "${term["translation"]}"`)
-      .join(",\n");
-
-    const glossaryCharacters = glossary.characters
-      .map(
-        (char) =>
-          `{"name in original": "${char["name in original"]}", "name in translation": "${char["name in translation"]}", "gender": "${char["gender"]}"}`
-      )
-      .join(",\n");
-
-    setIsTranslating(true);
-
-    try {
-      const translateChunk = async (chunk, attempt = 1) => {
-        try {
-          const response = await axios.post(
-            TRANSLATION_ENDPOINT,
-            {
-              model: TRANSLATION_MODEL,
-              messages: [
-                {
-                  role: "user",
-                  content: `${TRANSLATE_TO_ENGLISH_PROMPT} \n ${TRANSLATION_FORMAT_PROMPT} \n Here is the existing glossary of terms:\n${glossaryTerms}\n\nHere is the existing characters:\n${glossaryCharacters}\n\n`,
-                },
-                {
-                  role: "user",
-                  content: chunk,
-                },
-              ],
-            },
-            {
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${apiKey}`,
-              },
-            }
-          );
-
-          const rawContent = response.data.choices[0].message.content;
-
-          let parsedResponse;
-          try {
-            parsedResponse = JSON.parse(rawContent);
-          } catch (parseError) {
-            const cleanedContent = rawContent
-              .replace(/\n/g, "TEMPORARY_LONG_STRING_FOR_NEWLINE")
-              .replace(/\\"/g, "TEMPORARY_LONG_STRING_FOR_QUOTES")
-              .replace(/\\/g, "")
-              .replace(/TEMPORARY_LONG_STRING_FOR_NEWLINE/g, "\n")
-              .replace(/TEMPORARY_LONG_STRING_FOR_QUOTES/g, '\\"');
-            parsedResponse = JSON.parse(cleanedContent);
-          }
-
-          // Validate parsed response
-          if (!parsedResponse["TRANSLATION"]) {
-            throw new Error('Missing "TRANSLATION" in response.');
-          }
-
-          // Extract NEW_TERMS and NEW_CHARACTERS
-          return {
-            translation: parsedResponse["TRANSLATION"],
-            newTerms: parsedResponse["NEW_TERMS"] || [],
-            newCharacters: parsedResponse["NEW_CHARACTERS"] || [],
-          };
-        } catch (error) {
-          if (attempt < 5) {
-            console.warn(`Translation attempt ${attempt} failed. Retrying...`);
-            return await translateChunk(chunk, attempt + 1);
-          } else {
-            console.error(
-              `Translation failed after 5 attempts. Returning original text. Error: ${error}`
-            );
-            return { translation: chunk, newTerms: [], newCharacters: [] };
-          }
+    if (
+      isEnabled &&
+      selectedChapter !== null &&
+      chapters.length > 0 &&
+      apiKey
+    ) {
+      const translateCurrentIfNeeded = async () => {
+        if (!translations[selectedChapter] && chapters[selectedChapter]) {
+          console.log("Auto-translating current chapter:", selectedChapter);
+          await translateChapter(selectedChapter); // Await for current chapter
         }
       };
 
-      const translatedChunksPromises = chunks.map((chunk) =>
-        translateChunk(chunk)
-      );
-      const translatedResults = await Promise.all(translatedChunksPromises);
-
-      // Extract translations, new terms, and new characters
-      const fullTranslation = translatedResults
-        .map((result) => result.translation)
-        .join("\n\n");
-      const newTerms = translatedResults.flatMap((result) => result.newTerms);
-      const newCharacters = translatedResults.flatMap(
-        (result) => result.newCharacters
-      );
-
-      // Update translations
-      setTranslations((prev) => ({
-        ...prev,
-        [selectedChapter]: fullTranslation,
-      }));
-
-      // Update glossary terms
-      const addedTermsSet = new Set();
-      const uniqueNewTerms = newTerms.filter((newTerm) => {
-        const termKey = newTerm["term in original"];
+      translateCurrentIfNeeded().then(() => {
+        // After current chapter is handled (or if it didn't need translation),
+        // proceed to translate the next one in the background.
+        const nextChapterIndex = selectedChapter + 1;
         if (
-          termKey &&
-          !addedTermsSet.has(termKey) &&
-          !glossary.terms.some(
-            (existingTerm) => existingTerm["term in original"] === termKey
-          )
+          nextChapterIndex < chapters.length &&
+          !translations[nextChapterIndex] &&
+          chapters[nextChapterIndex]
         ) {
-          addedTermsSet.add(termKey);
-          return true;
+          console.log(
+            "Auto-translating next chapter in background:",
+            nextChapterIndex
+          );
+          translateChapter(nextChapterIndex); // Don't await, let it run in background
         }
-        return false;
       });
-
-      if (uniqueNewTerms.length > 0) {
-        setGlossary((prevGlossary) => ({
-          ...prevGlossary,
-          terms: [...prevGlossary.terms, ...uniqueNewTerms],
-        }));
-      }
-
-      // Update glossary characters
-      const addedCharactersSet = new Set();
-      const uniqueNewCharacters = newCharacters.filter((newChar) => {
-        const charKey = newChar["name in original"];
-        if (
-          charKey &&
-          !addedCharactersSet.has(charKey) &&
-          !glossary.characters.some(
-            (existingChar) => existingChar["name in original"] === charKey
-          )
-        ) {
-          addedCharactersSet.add(charKey);
-          return true;
-        }
-        return false;
-      });
-
-      if (uniqueNewCharacters.length > 0) {
-        setGlossary((prevGlossary) => ({
-          ...prevGlossary,
-          characters: [...prevGlossary.characters, ...uniqueNewCharacters],
-        }));
-      }
-    } catch (error) {
-      console.error("Translation failed", error);
-      alert(
-        "An error occurred during translation. Please check the console for details."
-      );
-    } finally {
-      setIsTranslating(false);
     }
-  };
+  }, [
+    selectedChapter,
+    chapters,
+    translations,
+    apiKey,
+    autoTranslateNextEnabled,
+    translateChapter,
+  ]); // Added translateChapter
 
   const handleLineClick = (line) => {
     setClickedLine(line);
@@ -404,6 +489,7 @@ const Viewer = () => {
             chapters={chapters}
             selectedChapter={selectedChapter}
             onSelectChapter={setSelectedChapter}
+            translations={translations}
           />
         )}
         <div
@@ -429,7 +515,7 @@ const Viewer = () => {
                 <Button
                   variant="outlined"
                   color="secondary"
-                  onClick={clearTranslation}
+                  onClick={openClearTranslationModal}
                   style={{ marginRight: "8px" }}
                 >
                   Clear Translation
@@ -617,6 +703,65 @@ const Viewer = () => {
                 }
               }}
             />
+          </div>
+        </Box>
+      </Modal>
+      <Modal
+        open={isClearTranslationModalOpen}
+        onClose={() => setIsClearTranslationModalOpen(false)}
+        aria-labelledby="clear-translation-modal-title"
+        aria-describedby="clear-translation-modal-description"
+      >
+        <Box
+          sx={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            bgcolor: "background.paper",
+            boxShadow: 24,
+            p: 4,
+            borderRadius: "8px",
+            minWidth: "300px",
+          }}
+        >
+          <h2 id="clear-translation-modal-title">Clear Translation Options</h2>
+          <p
+            id="clear-translation-modal-description"
+            style={{ marginTop: "8px", marginBottom: "16px" }}
+          >
+            Choose an option to clear translations:
+          </p>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: "8px",
+            }}
+          >
+            <Button
+              variant="contained"
+              color="warning"
+              onClick={handleClearCurrentChapterTranslation}
+              style={{ flexGrow: 1 }}
+            >
+              Clear This Chapter
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleClearAllTranslations}
+              style={{ flexGrow: 1 }}
+            >
+              Clear All Translations
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={() => setIsClearTranslationModalOpen(false)}
+              style={{ flexGrow: 1 }}
+            >
+              Cancel
+            </Button>
           </div>
         </Box>
       </Modal>

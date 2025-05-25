@@ -22,6 +22,10 @@ const SettingsMenu = ({
   const [apiKey, setApiKey] = useState(
     () => localStorage.getItem("apiKey") || ""
   );
+  const [autoTranslateNext, setAutoTranslateNext] = useState(() => {
+    const storedValue = localStorage.getItem("autoTranslateNext");
+    return storedValue ? JSON.parse(storedValue) : false;
+  });
 
   useEffect(() => {
     setFontSize(localFontSize);
@@ -37,6 +41,13 @@ const SettingsMenu = ({
     setChapterRegex(localChapterRegex);
     localStorage.setItem("chapterRegex", localChapterRegex);
   }, [localChapterRegex, setChapterRegex]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "autoTranslateNext",
+      JSON.stringify(autoTranslateNext)
+    );
+  }, [autoTranslateNext]);
 
   const handleFontSizeChange = (event, newValue) => {
     setLocalFontSize(newValue);
@@ -74,6 +85,14 @@ const SettingsMenu = ({
         <Switch
           checked={showChapterList}
           onChange={() => setShowChapterList((prev) => !prev)}
+          color="primary"
+        />
+      </div>
+      <div className="settings-item">
+        <span className="settings-label">Auto translate next</span>
+        <Switch
+          checked={autoTranslateNext}
+          onChange={() => setAutoTranslateNext((prev) => !prev)}
           color="primary"
         />
       </div>

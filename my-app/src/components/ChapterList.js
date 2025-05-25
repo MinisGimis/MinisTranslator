@@ -4,8 +4,14 @@ import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import ListItemText from "@mui/material/ListItemText";
 import ListItemButton from "@mui/material/ListItemButton";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 
-const ChapterList = ({ chapters, selectedChapter, onSelectChapter }) => (
+const ChapterList = ({
+  chapters,
+  selectedChapter,
+  onSelectChapter,
+  translations,
+}) => (
   <div className="chapter-list">
     <h2>Chapters ({chapters.length})</h2>
     <List className="chapter-ul">
@@ -23,7 +29,20 @@ const ChapterList = ({ chapters, selectedChapter, onSelectChapter }) => (
             className="chapter-button"
           >
             <ListItemText
-              primary={chapter.split("\n")[0]}
+              primary={
+                <span style={{ display: "flex", alignItems: "center" }}>
+                  {chapter.split("\n")[0]}
+                  {translations &&
+                    translations[index] &&
+                    typeof translations[index] === "string" &&
+                    translations[index].trim() !== "" && (
+                      <CheckCircleOutlineIcon
+                        fontSize="small"
+                        style={{ marginLeft: "8px", color: "green" }}
+                      />
+                    )}
+                </span>
+              }
               primaryTypographyProps={{
                 style: {
                   fontWeight: selectedChapter === index ? "bold" : "normal",
