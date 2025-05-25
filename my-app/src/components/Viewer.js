@@ -61,12 +61,19 @@ const Viewer = () => {
 
   useEffect(() => {
     const savedFileContent = localStorage.getItem("fileContent");
+    console.log(
+      "[useEffect:init] savedFileContent present:",
+      !!savedFileContent
+    );
+    console.log("[useEffect:init] chapters.length:", chapters.length);
+
     if (savedFileContent && chapters.length === 0) {
+      console.log("[useEffect:init] Calling extractChapters...");
       const extractedChapters = extractChapters(savedFileContent);
+      console.log("[useEffect:init] Setting chapters...");
       setChapters(extractedChapters);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chapters]);
+  }, []);
 
   useEffect(() => {
     if (chapters.length > 0) {
@@ -92,36 +99,52 @@ const Viewer = () => {
     const reader = new FileReader();
     reader.onload = (e) => {
       let fileContent = e.target.result;
+      console.log("[handleFileUpload] File read, length:", fileContent.length);
 
-      // Remove leading whitespace from each line while preserving newlines
       fileContent = fileContent
-        .split("\n") // Split content into lines
-        .map((line) => line.replace(/^\s+/, "")) // Remove leading whitespace
-        .join("\n"); // Join lines back into a single string
+        .split("\n")
+        .map((line) => line.replace(/^\s+/, ""))
+        .join("\n");
 
       localStorage.setItem("fileContent", fileContent);
+      console.log("[handleFileUpload] Cleaned file stored");
+
       const extractedChapters = extractChapters(fileContent);
       setChapters(extractedChapters);
+      console.log("[handleFileUpload] Chapters set:", extractedChapters.length);
+
       setSelectedChapter(0);
       setTranslations({});
-      setGlossary({ terms: [], characters: [] }); // Reset glossary
+      setGlossary({ terms: [], characters: [] });
+
       localStorage.removeItem("chapters");
       localStorage.removeItem("selectedChapter");
       localStorage.removeItem("translations");
       localStorage.removeItem("glossary");
+
+      console.log("[handleFileUpload] State and localStorage reset");
     };
     reader.readAsText(file);
   };
 
   const extractChapters = (content) => {
+    console.log("[extractChapters] Raw content length:", content.length);
+
     const chapterRegexPattern = new RegExp(chapterRegex, "g");
     const matches = [];
     let match;
+    let index = 0;
 
     while ((match = chapterRegexPattern.exec(content)) !== null) {
+      console.log(
+        `[extractChapters] Match ${index} found:`,
+        match[0].slice(0, 100)
+      ); // Show first 100 chars
       matches.push(match[0].trim());
+      index++;
     }
 
+    console.log("[extractChapters] Total chapters extracted:", matches.length);
     return matches;
   };
 
@@ -160,7 +183,7 @@ const Viewer = () => {
       .map((line) => line.trim())
       .join("\n\n");
 
-    const chunks = splitTextIntoChunks(contentToTranslate, 300);
+    const chunks = splitTextIntoChunks(contentToTranslate, 500);
 
     const glossaryTerms = glossary.terms
       .map((term) => `"${term["term in original"]}": "${term["translation"]}"`)
