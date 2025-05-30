@@ -3,7 +3,20 @@ import Switch from "@mui/material/Switch";
 import Slider from "@mui/material/Slider";
 import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
+import Box from "@mui/material/Box";
 import "../styles/App.css";
+
+const suggestedRegexes = [
+  {
+    label: "Numeric Chapters (e.g., 001., 002.)",
+    value: "(\\d{3}\\.{[\\s\\S]*?)(?=\\d{3}\\.|$)",
+  },
+  {
+    label: "Chinese Chapters (e.g., 第一章)",
+    value:
+      "(第[一二三四五六七八九十百千零0-9]+章[\\s\\S]*?)(?=第[一二三四五六七八九十百千零0-9]+章|$)",
+  },
+];
 
 const SettingsMenu = ({
   showChapterList,
@@ -131,6 +144,24 @@ const SettingsMenu = ({
           placeholder="Enter chapter regex"
         />
       </div>
+      <Box
+        sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 1, mb: 2 }}
+      >
+        <span className="settings-label" style={{ marginBottom: "4px" }}>
+          Suggestions:
+        </span>
+        {suggestedRegexes.map((regex) => (
+          <Button
+            key={regex.label}
+            variant="outlined"
+            size="small"
+            onClick={() => setLocalChapterRegex(regex.value)}
+            sx={{ textTransform: "none", justifyContent: "flex-start" }}
+          >
+            {regex.label}
+          </Button>
+        ))}
+      </Box>
       <div className="settings-item">
         <label className="settings-label">Import New File</label>
         <input type="file" accept=".txt" onChange={handleFileUpload} />
