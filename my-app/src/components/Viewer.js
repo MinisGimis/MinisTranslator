@@ -307,10 +307,6 @@ const Viewer = () => {
       setGlossary,
       setIsTranslating,
       splitTextIntoChunks,
-      TRANSLATE_TO_ENGLISH_PROMPT,
-      TRANSLATION_FORMAT_PROMPT,
-      TRANSLATION_ENDPOINT,
-      TRANSLATION_MODEL,
     ]
   ); // Added all dependencies
 
