@@ -11,9 +11,9 @@ import "../styles/App.css";
 import {
   TRANSLATE_TO_ENGLISH_PROMPT,
   TRANSLATION_FORMAT_PROMPT,
+  CLEANUP_GLOSSARY_PROMPT,
   TRANSLATION_ENDPOINT,
   TRANSLATION_MODEL,
-  CLEANUP_GLOSSARY_PROMPT,
 } from "../translations/prompts.js";
 
 const Viewer = () => {
@@ -555,17 +555,60 @@ const Viewer = () => {
 
       const rawContent = response.data.choices[0].message.content;
       try {
-        const cleanedGlossary = JSON.parse(rawContent);
+        const parsedResponse = JSON.parse(rawContent);
         if (
-          cleanedGlossary &&
-          cleanedGlossary.terms &&
-          cleanedGlossary.characters
+          parsedResponse &&
+          parsedResponse.cleaned_terms &&
+          parsedResponse.cleaned_characters
         ) {
-          setGlossary(cleanedGlossary);
-          console.log("Glossary cleaned successfully:", cleanedGlossary);
+          const transformedTerms = parsedResponse.cleaned_terms.map((term) => ({
+            "term in original": term.original,
+            translation: term.translation,
+          }));
+          const transformedCharacters = parsedResponse.cleaned_characters.map(
+            (char) => ({
+              "name in original": char.original_name,
+              "name in translation": char.translated_name,
+              gender: char.gender,
+            })
+          );
+
+          // Client-side deduplication
+          const uniqueTerms = [];
+          const seenTermOriginals = new Set();
+          for (const term of transformedTerms) {
+            if (
+              term["term in original"] &&
+              !seenTermOriginals.has(term["term in original"])
+            ) {
+              seenTermOriginals.add(term["term in original"]);
+              uniqueTerms.push(term);
+            }
+          }
+
+          const uniqueCharacters = [];
+          const seenCharacterOriginals = new Set();
+          for (const char of transformedCharacters) {
+            if (
+              char["name in original"] &&
+              !seenCharacterOriginals.has(char["name in original"])
+            ) {
+              seenCharacterOriginals.add(char["name in original"]);
+              uniqueCharacters.push(char);
+            }
+          }
+
+          setGlossary({
+            terms: uniqueTerms,
+            characters: uniqueCharacters,
+          });
+          console.log(
+            "Glossary cleaned and deduplicated successfully. Final data:",
+            { terms: uniqueTerms, characters: uniqueCharacters }
+          );
         } else {
           throw new Error(
-            "Cleaned glossary response is not in the expected format."
+            "Cleaned glossary response is not in the expected format. Missing 'cleaned_terms' or 'cleaned_characters'."
           );
         }
       } catch (parseError) {
