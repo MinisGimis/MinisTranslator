@@ -13,6 +13,7 @@ import {
   TRANSLATION_FORMAT_PROMPT,
   TRANSLATION_ENDPOINT,
   TRANSLATION_MODEL,
+  CLEANUP_GLOSSARY_PROMPT,
 } from "../translations/prompts.js";
 
 const Viewer = () => {
@@ -64,6 +65,16 @@ const Viewer = () => {
   );
   const [isClearTranslationModalOpen, setIsClearTranslationModalOpen] =
     useState(false);
+  const [isCleaningGlossary, setIsCleaningGlossary] = useState(false);
+
+  // State for inline editing glossary
+  const [editingTerm, setEditingTerm] = useState(null); // { index, type, data }
+  const [editedOriginal, setEditedOriginal] = useState("");
+  const [editedTranslation, setEditedTranslation] = useState("");
+  const [editedGender, setEditedGender] = useState("");
+
+  // State for confirming delete all glossary
+  const [isConfirmingDeleteAll, setIsConfirmingDeleteAll] = useState(false);
 
   const contentRef = useRef(null);
 
@@ -453,6 +464,133 @@ const Viewer = () => {
     });
   };
 
+  const handleEditClick = (index, type, data) => {
+    setEditingTerm({ index, type, data });
+    if (type === "terms") {
+      setEditedOriginal(data["term in original"]);
+      setEditedTranslation(data["translation"]);
+    } else if (type === "characters") {
+      setEditedOriginal(data["name in original"]);
+      setEditedTranslation(data["name in translation"]);
+      setEditedGender(data["gender"]);
+    }
+  };
+
+  const handleSaveEditedTerm = () => {
+    if (!editingTerm) return;
+
+    const { index, type } = editingTerm;
+    const updatedGlossary = JSON.parse(JSON.stringify(glossary)); // Deep copy
+
+    if (type === "terms") {
+      updatedGlossary.terms[index] = {
+        "term in original": editedOriginal,
+        translation: editedTranslation,
+      };
+    } else if (type === "characters") {
+      updatedGlossary.characters[index] = {
+        "name in original": editedOriginal,
+        "name in translation": editedTranslation,
+        gender: editedGender.toLowerCase(),
+      };
+    }
+
+    setGlossary(updatedGlossary);
+    setEditingTerm(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingTerm(null);
+    // Optionally reset editedOriginal, editedTranslation, editedGender if needed
+  };
+
+  const handleDeleteAllClick = () => {
+    setIsConfirmingDeleteAll(true);
+  };
+
+  const handleConfirmDeleteAll = () => {
+    setGlossary({ terms: [], characters: [] });
+    setIsConfirmingDeleteAll(false);
+  };
+
+  const handleCancelDeleteAll = () => {
+    setIsConfirmingDeleteAll(false);
+  };
+
+  const handleAutoCleanupGlossary = async () => {
+    if (!apiKey) {
+      alert("API key is not set. Please set it in the settings.");
+      return;
+    }
+
+    setIsCleaningGlossary(true);
+    try {
+      const glossaryPayload = {
+        terms: glossary.terms,
+        characters: glossary.characters,
+      };
+
+      const response = await axios.post(
+        TRANSLATION_ENDPOINT,
+        {
+          model: TRANSLATION_MODEL,
+          messages: [
+            {
+              role: "system",
+              content: CLEANUP_GLOSSARY_PROMPT,
+            },
+            {
+              role: "user",
+              content: JSON.stringify(glossaryPayload),
+            },
+          ],
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+        }
+      );
+
+      const rawContent = response.data.choices[0].message.content;
+      try {
+        const cleanedGlossary = JSON.parse(rawContent);
+        if (
+          cleanedGlossary &&
+          cleanedGlossary.terms &&
+          cleanedGlossary.characters
+        ) {
+          setGlossary(cleanedGlossary);
+          console.log("Glossary cleaned successfully:", cleanedGlossary);
+        } else {
+          throw new Error(
+            "Cleaned glossary response is not in the expected format."
+          );
+        }
+      } catch (parseError) {
+        console.error(
+          "Failed to parse cleaned glossary response:",
+          parseError,
+          "Raw content:",
+          rawContent
+        );
+        alert(
+          "Failed to parse the cleaned glossary data from the API. Check console for details."
+        );
+      }
+    } catch (error) {
+      console.error("Failed to clean up glossary:", error);
+      alert(
+        `Failed to clean up glossary: ${
+          error.response ? error.response.data.error.message : error.message
+        }`
+      );
+    } finally {
+      setIsCleaningGlossary(false);
+    }
+  };
+
   const handleScroll = () => {
     if (contentRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = contentRef.current;
@@ -629,16 +767,90 @@ const Viewer = () => {
             <h3>Terms</h3>
             <ul>
               {glossary.terms.map((entry, index) => (
-                <li key={index}>
-                  {entry["term in original"]} → {entry["translation"]}
-                  <Button
-                    size="small"
-                    color="error"
-                    onClick={() => deleteGlossaryEntry(index, "terms")}
-                    style={{ marginLeft: "8px" }}
-                  >
-                    Delete
-                  </Button>
+                <li key={index} style={{ marginBottom: "10px" }}>
+                  {editingTerm &&
+                  editingTerm.type === "terms" &&
+                  editingTerm.index === index ? (
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 1,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <TextField
+                        label="Original"
+                        value={editedOriginal}
+                        onChange={(e) => setEditedOriginal(e.target.value)}
+                        size="small"
+                        variant="outlined"
+                        sx={{ flexGrow: 1, minWidth: "120px" }}
+                      />
+                      <TextField
+                        label="Translation"
+                        value={editedTranslation}
+                        onChange={(e) => setEditedTranslation(e.target.value)}
+                        size="small"
+                        variant="outlined"
+                        sx={{ flexGrow: 1, minWidth: "120px" }}
+                      />
+                      <Button
+                        onClick={handleSaveEditedTerm}
+                        size="small"
+                        variant="contained"
+                        color="primary"
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        onClick={handleCancelEdit}
+                        size="small"
+                        variant="outlined"
+                      >
+                        Cancel
+                      </Button>
+                    </Box>
+                  ) : (
+                    <div
+                      onClick={() => handleEditClick(index, "terms", entry)}
+                      style={{
+                        cursor: "pointer",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "4px 0",
+                      }}
+                    >
+                      <span>
+                        {entry["term in original"]} → {entry["translation"]}
+                      </span>
+                      <div>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditClick(index, "terms", entry);
+                          }}
+                          style={{ marginRight: "8px" }}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size="small"
+                          color="error"
+                          variant="outlined"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteGlossaryEntry(index, "terms");
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
@@ -662,17 +874,99 @@ const Viewer = () => {
             <h3>Characters</h3>
             <ul>
               {glossary.characters.map((char, index) => (
-                <li key={index}>
-                  {char["name in original"]} → {char["name in translation"]} (
-                  {char["gender"]})
-                  <Button
-                    size="small"
-                    color="error"
-                    onClick={() => deleteGlossaryEntry(index, "characters")}
-                    style={{ marginLeft: "8px" }}
-                  >
-                    Delete
-                  </Button>
+                <li key={index} style={{ marginBottom: "10px" }}>
+                  {editingTerm &&
+                  editingTerm.type === "characters" &&
+                  editingTerm.index === index ? (
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 1,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <TextField
+                        label="Original Name"
+                        value={editedOriginal}
+                        onChange={(e) => setEditedOriginal(e.target.value)}
+                        size="small"
+                        variant="outlined"
+                        sx={{ flexGrow: 1, minWidth: "100px" }}
+                      />
+                      <TextField
+                        label="Translated Name"
+                        value={editedTranslation}
+                        onChange={(e) => setEditedTranslation(e.target.value)}
+                        size="small"
+                        variant="outlined"
+                        sx={{ flexGrow: 1, minWidth: "100px" }}
+                      />
+                      <TextField
+                        label="Gender"
+                        value={editedGender}
+                        onChange={(e) => setEditedGender(e.target.value)}
+                        size="small"
+                        variant="outlined"
+                        sx={{ width: "80px" }}
+                      />
+                      <Button
+                        onClick={handleSaveEditedTerm}
+                        size="small"
+                        variant="contained"
+                        color="primary"
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        onClick={handleCancelEdit}
+                        size="small"
+                        variant="outlined"
+                      >
+                        Cancel
+                      </Button>
+                    </Box>
+                  ) : (
+                    <div
+                      onClick={() => handleEditClick(index, "characters", char)}
+                      style={{
+                        cursor: "pointer",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "4px 0",
+                      }}
+                    >
+                      <span>
+                        {char["name in original"]} →{" "}
+                        {char["name in translation"]} ({char["gender"]})
+                      </span>
+                      <div>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditClick(index, "characters", char);
+                          }}
+                          style={{ marginRight: "8px" }}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size="small"
+                          color="error"
+                          variant="outlined"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteGlossaryEntry(index, "characters");
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
@@ -700,6 +994,23 @@ const Viewer = () => {
               }}
             />
           </div>
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={handleAutoCleanupGlossary}
+            style={{ width: "100%" }}
+            disabled={isCleaningGlossary}
+          >
+            {isCleaningGlossary ? "Cleaning..." : "Auto clean up Glossary"}
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDeleteAllClick}
+            style={{ width: "100%" }}
+          >
+            Delete All Glossary
+          </Button>
         </Box>
       </Modal>
       <Modal
@@ -756,6 +1067,48 @@ const Viewer = () => {
               onClick={() => setIsClearTranslationModalOpen(false)}
               style={{ flexGrow: 1 }}
             >
+              Cancel
+            </Button>
+          </div>
+        </Box>
+      </Modal>
+      {/* Confirmation Modal for Deleting All Glossary */}
+      <Modal
+        open={isConfirmingDeleteAll}
+        onClose={handleCancelDeleteAll}
+        aria-labelledby="confirm-delete-all-title"
+        aria-describedby="confirm-delete-all-description"
+      >
+        <Box
+          sx={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            bgcolor: "background.paper",
+            boxShadow: 24,
+            p: 4,
+            borderRadius: "8px",
+            minWidth: "300px",
+            textAlign: "center",
+          }}
+        >
+          <h2 id="confirm-delete-all-title">Confirm Delete All</h2>
+          <p id="confirm-delete-all-description" style={{ margin: "16px 0" }}>
+            Are you sure you want to delete the entire glossary? This action
+            cannot be undone.
+          </p>
+          <div
+            style={{ display: "flex", justifyContent: "center", gap: "16px" }}
+          >
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleConfirmDeleteAll}
+            >
+              Confirm Delete
+            </Button>
+            <Button variant="outlined" onClick={handleCancelDeleteAll}>
               Cancel
             </Button>
           </div>
