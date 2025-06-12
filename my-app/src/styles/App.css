@@ -27,12 +27,7 @@ body {
   padding: 10px 0 10px 0;
 }
 
-.hoverable-line {
-  transition: background-color 0.2s ease;
-}
-
 .hoverable-line:hover {
-  background-color: #f0f8ff;
   cursor: pointer;
 }
 
