@@ -9,6 +9,10 @@ import Box from "@mui/material/Box";
 import TextField from "@mui/material/TextField";
 import "../styles/App.css";
 import {
+  convertToTraditional,
+  getPinyin,
+} from "../utils/textConversion.js";
+import {
   TRANSLATE_TO_ENGLISH_PROMPT,
   TRANSLATION_FORMAT_PROMPT,
   CLEANUP_GLOSSARY_PROMPT,
@@ -66,6 +70,13 @@ const Viewer = () => {
   const [isClearTranslationModalOpen, setIsClearTranslationModalOpen] =
     useState(false);
   const [isCleaningGlossary, setIsCleaningGlossary] = useState(false);
+  const [chineseVariant, setChineseVariant] = useState(
+    () => localStorage.getItem("chineseVariant") || "simplified"
+  );
+  const [showPinyin, setShowPinyin] = useState(() => {
+    const storedPinyin = localStorage.getItem("showPinyin");
+    return storedPinyin ? JSON.parse(storedPinyin) : false;
+  });
 
   // State for inline editing glossary
   const [editingTerm, setEditingTerm] = useState(null); // { index, type, data }
@@ -113,6 +124,12 @@ const Viewer = () => {
       if (event.key === "autoTranslateNext") {
         const newValue = event.newValue ? JSON.parse(event.newValue) : false;
         setAutoTranslateNextEnabled(newValue);
+      }
+      if (event.key === "chineseVariant") {
+        setChineseVariant(event.newValue || "simplified");
+      }
+      if (event.key === "showPinyin") {
+        setShowPinyin(event.newValue ? JSON.parse(event.newValue) : false);
       }
     };
 
@@ -708,19 +725,73 @@ const Viewer = () => {
               <div>
                 {(translations[selectedChapter] || chapters[selectedChapter])
                   .split("\n")
-                  .map((line, index) => (
-                    <p
-                      key={index}
-                      className="line hoverable-line"
-                      style={{
-                        fontSize: `${fontSize}px`,
-                        padding: `0 ${viewerPadding}px`,
-                      }}
-                      onClick={() => handleLineClick(line)}
-                    >
-                      {line}
-                    </p>
-                  ))}
+                  .map((line, index) => {
+                    let processedLine = line;
+                    if (chineseVariant === "traditional") {
+                      processedLine = convertToTraditional(line);
+                    }
+
+                    if (showPinyin) {
+                      // Regex to match Chinese characters
+                      const chineseCharRegex = /[\u4e00-\u9fff]/;
+                      return (
+                        <p
+                          key={index}
+                          className="line hoverable-line"
+                          style={{
+                            fontSize: `${fontSize}px`,
+                            padding: `0 ${viewerPadding}px`,
+                            display: "flex",
+                            flexWrap: "wrap", // Allow items to wrap to next line
+                          }}
+                          onClick={() => handleLineClick(line)} // Original line for modal
+                        >
+                          {processedLine.split("").map((char, charIndex) => {
+                            if (chineseCharRegex.test(char)) {
+                              const pinyinResult = getPinyin(char);
+                              const pinyinText =
+                                pinyinResult &&
+                                pinyinResult.length > 0 &&
+                                pinyinResult[0].length > 0
+                                  ? pinyinResult[0][0]
+                                  : "";
+                              return (
+                                <span
+                                  key={charIndex}
+                                  className="char-pinyin-container"
+                                >
+                                  <span className="pinyin-text">
+                                    {pinyinText}
+                                  </span>
+                                  <span className="char-text">{char}</span>
+                                </span>
+                              );
+                            } else {
+                              return (
+                                <span key={charIndex} className="char-text">
+                                  {char}
+                                </span>
+                              ); // Render non-Chinese characters as is
+                            }
+                          })}
+                        </p>
+                      );
+                    } else {
+                      return (
+                        <p
+                          key={index}
+                          className="line hoverable-line"
+                          style={{
+                            fontSize: `${fontSize}px`,
+                            padding: `0 ${viewerPadding}px`,
+                          }}
+                          onClick={() => handleLineClick(line)} // Original line for modal
+                        >
+                          {processedLine}
+                        </p>
+                      );
+                    }
+                  })}
               </div>
               <div className="scroll-padding">
                 <p className="scroll-message">Scroll to continue</p>

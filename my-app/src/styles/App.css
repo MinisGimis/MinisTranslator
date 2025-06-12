@@ -169,3 +169,30 @@ body {
   font-size: 16px;
   min-width: 120px;
 }
+
+/* Styles for Pinyin display */
+.char-pinyin-container {
+  display: inline-flex; /* Allows containers to sit side-by-side */
+  flex-direction: column;
+  align-items: center;
+  margin: 0 1px; /* Small margin between characters */
+  position: relative; /* For potential future absolute positioning of pinyin if needed */
+  vertical-align: middle; /* Align with surrounding text if any */
+  line-height: normal; /* Reset line height for the container */
+}
+
+.pinyin-text {
+  font-size: 0.6em; /* Smaller font size for Pinyin */
+  color: #555; /* Pinyin color */
+  line-height: 1.2; /* Adjust line height for pinyin */
+  display: block; /* Ensure it takes its own line above the character */
+  text-align: center;
+  white-space: nowrap; /* Prevent pinyin from wrapping if it's long */
+}
+
+.char-text {
+  font-size: 1em; /* Character text uses the inherited font size from .line */
+  line-height: 1.2; /* Adjust line height for character */
+  display: block; /* Ensure it takes its own line */
+  text-align: center;
+}

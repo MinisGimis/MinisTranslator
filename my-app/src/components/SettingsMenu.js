@@ -4,6 +4,7 @@ import Slider from "@mui/material/Slider";
 import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
 import Box from "@mui/material/Box";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import "../styles/App.css";
 
 const suggestedRegexes = [
@@ -39,6 +40,13 @@ const SettingsMenu = ({
     const storedValue = localStorage.getItem("autoTranslateNext");
     return storedValue ? JSON.parse(storedValue) : false;
   });
+  const [chineseVariant, setChineseVariant] = useState(
+    () => localStorage.getItem("chineseVariant") || "simplified"
+  );
+  const [showPinyin, setShowPinyin] = useState(() => {
+    const storedPinyin = localStorage.getItem("showPinyin");
+    return storedPinyin ? JSON.parse(storedPinyin) : false;
+  });
 
   useEffect(() => {
     setFontSize(localFontSize);
@@ -61,6 +69,14 @@ const SettingsMenu = ({
       JSON.stringify(autoTranslateNext)
     );
   }, [autoTranslateNext]);
+
+  useEffect(() => {
+    localStorage.setItem("chineseVariant", chineseVariant);
+  }, [chineseVariant]);
+
+  useEffect(() => {
+    localStorage.setItem("showPinyin", JSON.stringify(showPinyin));
+  }, [showPinyin]);
 
   const handleFontSizeChange = (event, newValue) => {
     setLocalFontSize(newValue);
@@ -107,6 +123,34 @@ const SettingsMenu = ({
           checked={autoTranslateNext}
           onChange={() => setAutoTranslateNext((prev) => !prev)}
           color="primary"
+        />
+      </div>
+      <div className="settings-item">
+        <FormControlLabel
+          control={
+            <Switch
+              checked={chineseVariant === "traditional"}
+              onChange={() =>
+                setChineseVariant((prev) =>
+                  prev === "simplified" ? "traditional" : "simplified"
+                )
+              }
+              color="primary"
+            />
+          }
+          label="Traditional Chinese"
+        />
+      </div>
+      <div className="settings-item">
+        <FormControlLabel
+          control={
+            <Switch
+              checked={showPinyin}
+              onChange={() => setShowPinyin((prev) => !prev)}
+              color="primary"
+            />
+          }
+          label="Show Pinyin"
         />
       </div>
       <div className="settings-item">
