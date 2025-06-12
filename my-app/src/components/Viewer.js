@@ -11,6 +11,7 @@ import "../styles/App.css";
 import {
   convertToTraditional,
   getPinyin,
+  detectChineseVariant,
 } from "../utils/textConversion.js";
 import {
   TRANSLATE_TO_ENGLISH_PROMPT,
@@ -350,14 +351,32 @@ const Viewer = () => {
         .join("\n"); // Join lines back into a single string
 
       localStorage.setItem("fileContent", fileContent);
+
+      // Auto-detect Chinese variant
+      const textSample = fileContent.substring(0, 200);
+      const detectedVariant = detectChineseVariant(textSample);
+
+      if (detectedVariant === "traditional" || detectedVariant === "simplified") {
+        setChineseVariant(detectedVariant);
+        localStorage.setItem("chineseVariant", detectedVariant);
+        console.log("Auto-detected Chinese variant:", detectedVariant);
+      } else {
+        // Optional: Fallback to existing localStorage value or default if detection is "unknown"
+        const existingVariant = localStorage.getItem("chineseVariant") || "simplified";
+        setChineseVariant(existingVariant);
+        console.log("Chinese variant detection unknown, using existing/default:", existingVariant);
+      }
+
       const extractedChapters = extractChapters(fileContent);
       setChapters(extractedChapters);
       setSelectedChapter(0);
       setTranslations({});
       setGlossary({ terms: [], characters: [] }); // Reset glossary
+      // Clear previous chapter-specific localStorage items upon new file upload
       localStorage.removeItem("chapters");
       localStorage.removeItem("selectedChapter");
       localStorage.removeItem("translations");
+      // Glossary is reset, so remove its storage too. API key and general settings like fontSize, autoTranslateNext, showPinyin, viewerPadding, chapterRegex should persist.
       localStorage.removeItem("glossary");
     };
     reader.readAsText(file);

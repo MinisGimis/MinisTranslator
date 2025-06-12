@@ -36,3 +36,54 @@ export const getPinyin = (text) => {
     heteronym: false,
   });
 };
+
+/**
+ * Attempts to detect the Chinese variant (simplified or traditional) from a sample text.
+ * This is a simple heuristic and not guaranteed to be accurate.
+ * @param {string} textSample A sample of text (e.g., first 200 characters).
+ * @returns {"simplified" | "traditional" | "unknown"} The detected variant or "unknown".
+ */
+export const detectChineseVariant = (textSample) => {
+  if (!textSample || typeof textSample !== "string") {
+    return "unknown";
+  }
+
+  // Characters more common or unique to Traditional Chinese
+  const traditionalChars = new Set(['憂', '慮', '麵', '開', '關', '蘋', '藝', '體', '貝', '見']);
+  // Characters more common or unique to Simplified Chinese
+  const simplifiedChars = new Set(['忧', '虑', '面', '开', '关', '苹', '艺', '体', '贝', '见']);
+
+  let traditionalCount = 0;
+  let simplifiedCount = 0;
+  const sampleLength = Math.min(textSample.length, 200); // Analyze up to 200 chars
+
+  for (let i = 0; i < sampleLength; i++) {
+    const char = textSample[i];
+    if (traditionalChars.has(char)) {
+      traditionalCount++;
+    }
+    if (simplifiedChars.has(char)) {
+      simplifiedCount++;
+    }
+  }
+
+  // Basic decision logic
+  // If one count is significantly higher, or if one count is present and the other is zero.
+  if (traditionalCount > simplifiedCount && traditionalCount > 2) {
+    return "traditional";
+  }
+  if (simplifiedCount > traditionalCount && simplifiedCount > 2) {
+    return "simplified";
+  }
+  if (traditionalCount > 0 && simplifiedCount === 0) {
+    return "traditional";
+  }
+  if (simplifiedCount > 0 && traditionalCount === 0) {
+    return "simplified";
+  }
+
+  // If counts are low or ambiguous, default to unknown or a preferred default.
+  // For this case, if counts are very close and low, it's hard to tell.
+  // If counts are both 0, it might not be Chinese text or uses characters not in our sets.
+  return "unknown"; // Or could return "simplified" as a general default
+};
