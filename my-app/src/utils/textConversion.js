@@ -1,4 +1,4 @@
-import OpenCC from "opencc-js";
+import { Converter } from "opencc-js";
 import pinyin from "pinyin";
 
 /**
@@ -11,7 +11,7 @@ export const convertToTraditional = (text) => {
   if (!text) {
     return "";
   }
-  const converter = OpenCC.Converter({ from: "cn", to: "twp" });
+  const converter = new Converter({ from: "cn", to: "twp" });
   return converter(text);
 };
 
