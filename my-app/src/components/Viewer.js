@@ -11,6 +11,7 @@ import "../styles/App.css";
 import {
   convertToTraditional,
   getPinyin,
+  detectVariant,
 } from "../utils/textConversion.js";
 import {
   TRANSLATE_TO_ENGLISH_PROMPT,
@@ -20,7 +21,12 @@ import {
   TRANSLATION_MODEL,
 } from "../translations/prompts.js";
 
-const Viewer = () => {
+const Viewer = ({
+  chineseVariant,
+  setChineseVariant,
+  showPinyin,
+  setShowPinyin,
+}) => {
   const [apiKey] = useState(() => localStorage.getItem("apiKey") || "");
 
   const [chapters, setChapters] = useState(() => {
@@ -70,13 +76,6 @@ const Viewer = () => {
   const [isClearTranslationModalOpen, setIsClearTranslationModalOpen] =
     useState(false);
   const [isCleaningGlossary, setIsCleaningGlossary] = useState(false);
-  const [chineseVariant, setChineseVariant] = useState(
-    () => localStorage.getItem("chineseVariant") || "simplified"
-  );
-  const [showPinyin, setShowPinyin] = useState(() => {
-    const storedPinyin = localStorage.getItem("showPinyin");
-    return storedPinyin ? JSON.parse(storedPinyin) : false;
-  });
 
   // State for inline editing glossary
   const [editingTerm, setEditingTerm] = useState(null); // { index, type, data }
@@ -125,12 +124,7 @@ const Viewer = () => {
         const newValue = event.newValue ? JSON.parse(event.newValue) : false;
         setAutoTranslateNextEnabled(newValue);
       }
-      if (event.key === "chineseVariant") {
-        setChineseVariant(event.newValue || "simplified");
-      }
-      if (event.key === "showPinyin") {
-        setShowPinyin(event.newValue ? JSON.parse(event.newValue) : false);
-      }
+      // chineseVariant and showPinyin are now managed by App.js
     };
 
     window.addEventListener("storage", handleStorageChange);
@@ -350,6 +344,12 @@ const Viewer = () => {
         .join("\n"); // Join lines back into a single string
 
       localStorage.setItem("fileContent", fileContent);
+
+      // Detect variant and update state
+      const textSample = fileContent.substring(0, 500);
+      const detected = detectVariant(textSample);
+      setChineseVariant(detected); // This is the prop setter from App.js
+
       const extractedChapters = extractChapters(fileContent);
       setChapters(extractedChapters);
       setSelectedChapter(0);
@@ -676,6 +676,10 @@ const Viewer = () => {
         setViewerPadding={setViewerPadding}
         chapterRegex={chapterRegex}
         setChapterRegex={setChapterRegex}
+        chineseVariant={chineseVariant}
+        setChineseVariant={setChineseVariant}
+        showPinyin={showPinyin}
+        setShowPinyin={setShowPinyin}
       />
       <div className="viewer-content">
         {showChapterList && (

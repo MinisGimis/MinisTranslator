@@ -34,6 +34,10 @@ const SettingsMenu = ({
   onFileUpload,
   chapterRegex,
   setChapterRegex,
+  chineseVariant,
+  setChineseVariant,
+  showPinyin,
+  setShowPinyin,
 }) => {
   const [localFontSize, setLocalFontSize] = useState(fontSize);
   const [localPadding, setLocalPadding] = useState(viewerPadding);
@@ -44,13 +48,6 @@ const SettingsMenu = ({
   const [autoTranslateNext, setAutoTranslateNext] = useState(() => {
     const storedValue = localStorage.getItem("autoTranslateNext");
     return storedValue ? JSON.parse(storedValue) : false;
-  });
-  const [chineseVariant, setChineseVariant] = useState(
-    () => localStorage.getItem("chineseVariant") || "simplified"
-  );
-  const [showPinyin, setShowPinyin] = useState(() => {
-    const storedPinyin = localStorage.getItem("showPinyin");
-    return storedPinyin ? JSON.parse(storedPinyin) : false;
   });
 
   useEffect(() => {
@@ -74,14 +71,6 @@ const SettingsMenu = ({
       JSON.stringify(autoTranslateNext)
     );
   }, [autoTranslateNext]);
-
-  useEffect(() => {
-    localStorage.setItem("chineseVariant", chineseVariant);
-  }, [chineseVariant]);
-
-  useEffect(() => {
-    localStorage.setItem("showPinyin", JSON.stringify(showPinyin));
-  }, [showPinyin]);
 
   const handleFontSizeChange = (event, newValue) => {
     setLocalFontSize(newValue);
@@ -136,8 +125,8 @@ const SettingsMenu = ({
             <Switch
               checked={chineseVariant === "traditional"}
               onChange={() =>
-                setChineseVariant((prev) =>
-                  prev === "simplified" ? "traditional" : "simplified"
+                setChineseVariant(
+                  chineseVariant === "simplified" ? "traditional" : "simplified"
                 )
               }
               color="primary"
@@ -151,7 +140,7 @@ const SettingsMenu = ({
           control={
             <Switch
               checked={showPinyin}
-              onChange={() => setShowPinyin((prev) => !prev)}
+              onChange={() => setShowPinyin(!showPinyin)}
               color="primary"
             />
           }

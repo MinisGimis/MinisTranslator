@@ -16,6 +16,10 @@ const Header = ({
   setViewerPadding,
   chapterRegex,
   setChapterRegex,
+  chineseVariant,
+  setChineseVariant,
+  showPinyin,
+  setShowPinyin,
 }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -47,6 +51,10 @@ const Header = ({
             onFileUpload={onFileUpload}
             chapterRegex={chapterRegex}
             setChapterRegex={setChapterRegex}
+            chineseVariant={chineseVariant}
+            setChineseVariant={setChineseVariant}
+            showPinyin={showPinyin}
+            setShowPinyin={setShowPinyin}
           />
         )}
       </div>
